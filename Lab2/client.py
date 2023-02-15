@@ -12,7 +12,7 @@ client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 ### write your code here ###
 serverPort = 12000
 server_ip = socket.gethostbyname(socket.gethostname())
-client_socket.connect((server_ip,serverPort))
+client_socket.connect((server_ip,serverPort)) # Create a client socket to connect it to a server socket which in this case is on the same machine.
 ### your code ends here ###
 
 while True:
@@ -31,7 +31,7 @@ while True:
 
 	read_sockets,write_socket, error_socket = select.select(inputs,[],[]) # By passing inputs as the first argument, we instruct the select method to monitor both the command
 	# line and the client socket for incoming data and then return a list of sockets that are ready to be read from. We store the list in read_stockets: in line 39. 
-	# We use this to determine which input sources have data that can be read.
+	# We use this to determine which input sources have data that can be read. AGAIN remember, we are only interested in the inputs (messages) and we store them in the read_sockets.
 
 	# we check if the message is either coming from your terminal or 
 	# from a server
