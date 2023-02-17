@@ -30,23 +30,29 @@ def handleClient(connection, addr):
 	all_client_connections.append(connection)
 	# create a message to inform all other clients 
 	# that a new client has just joined.
-	message = f"New client joined from: {addr}"
+	broadcast(connection, f"Client {addr} joined.")
+	welcomeMessage = "Welcome!"
+	connection.send(welcomeMessage.encode())
 	### Your code ends here ###
 
-	while True: # A loop that goes on and on...
-		message = connection.recv(2048).decode() # When we receive the message via socks.recv(1024), the data is returned as a bytes object, 
-		#because sockets transmits data in binary and so we need to convert it from the bytes format to String.
-		print (now() + " " +  str(addr) + "#  ", message)
-		if (message == "exit" or not message): # If we write exit in the terminal, then the client will close the connection it previously established.
-			broadcast(connection,f"{addr} has left the server")
-			break # It will also break out of the loop if we simply press enter in the terminal without writing anything, so in other words an empty string.
-		### Write your code here ###
-		#broadcast this message to the others
-		else:
-			broadcast(connection, f"{addr}: {message}")
-		### Your code ends here ###
-	connection.close()                        # Today: 16.02.23 Maybe look into maybe moving line 47 and 48 under the if statement in line 40?
-	all_client_connections.remove(connection)
+	try:
+		while True: # A loop that goes on and on...
+			message = connection.recv(2048).decode().strip() # When we receive the message via socks.recv(1024), the data is returned as a bytes object, 
+			#because sockets transmit data in binary and so we need to convert it from the bytes format to String.
+			print (now() + " " +  str(addr) + "#  ", message)
+			if message == "exit": # If we write exit in the terminal, then the client will close the connection it previously established.
+				broadcast(connection,f"{addr} has left the server".decode())
+				# connection.close()                        
+				# all_client_connections.remove(connection)
+				break # It will also break out of the loop if we simply press enter in the terminal without writing anything, so in other words an empty string.
+			### Write your code here ###
+			#broadcast this message to the others
+			else:
+				broadcast(connection, f"{addr}: {message}")
+			### Your code ends here ###
+	except:
+		# connection.close()                        
+		all_client_connections.remove(connection)
 
 #Broadcasts a message to all clients except the client that initiated the connection which is why we have the if statement.
 def broadcast(connection, message): # The connection parameter is the the client that has initiated the connection which is in the all_client_connections array.

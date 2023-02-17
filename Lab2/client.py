@@ -50,8 +50,15 @@ while True:
 			# Remember, the sock.recv(1024) method calls on the socket object 'socks' and the 1024 is the amount of data it can receive before it splices
 			# the data into chunks.
 			try:
-				message = socks.recv(1024) # This is a BLOCKING CALL which means that the program will wait until data is received before moving onto
+				message = socks.recv(1024).decode() # This is a BLOCKING CALL which means that the program will wait until data is received before moving onto
 				# the next line of code.
+				if not message: #when data doesn't get a connection to a server
+					print("Connection to server lost. Exiting...") 
+					break
+				if "has left the chat" in message: #when a client has entered the "exit" msg 
+					print(message)
+					break
+				print(message)
 			except:
 				print('Disconnected from the server') # We take an exception handling in case the socket is closed on the other end (server) which means
 				# that it will return an empty byte object.
