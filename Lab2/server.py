@@ -33,6 +33,9 @@ def handleClient(connection, addr):
 	broadcast(connection, f"Client {addr} joined.")
 	welcomeMessage = "Welcome!"
 	connection.send(welcomeMessage.encode())
+	broadcast(connection, f"Client {addr} joined.")
+	welcomeMessage = "Welcome!"
+	connection.send(welcomeMessage.encode())
 	### Your code ends here ###
 
 	try:
