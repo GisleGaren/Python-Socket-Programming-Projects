@@ -64,7 +64,7 @@ while True:
 				# that it will return an empty byte object.
 				sys.exit() # We terminate the program when the socket closes and we return to the terminal.
 
-			print(message.decode()) # When we receive the message via socks.recv(1024), the data is returned as a bytes object, because sockets transmits
+		#	print(message.decode()) # When we receive the message via socks.recv(1024), the data is returned as a bytes object, because sockets transmits
 			# data in binary and so we need to convert it from the bytes format to String.
 
 			### your code ends here ###
