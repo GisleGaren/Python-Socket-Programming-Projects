@@ -31,10 +31,7 @@ def handleClient(connection, addr):
 	# create a message to inform all other clients 
 	# that a new client has just joined.
 	broadcast(connection, f"Client {addr} joined.")
-	welcomeMessage = "Welcome!"
-	connection.send(welcomeMessage.encode())
-	broadcast(connection, f"Client {addr} joined.")
-	welcomeMessage = "Welcome!"
+	welcomeMessage = "Welcome to the chat!"
 	connection.send(welcomeMessage.encode())
 	### Your code ends here ###
 
@@ -54,7 +51,7 @@ def handleClient(connection, addr):
 				broadcast(connection, f"{addr}: {message}")
 			### Your code ends here ###
 	except:
-		# connection.close()                        
+		# connection.close()    This was causing an error where the terminal would keep getting refreshed and would spam line shifts.                    
 		all_client_connections.remove(connection)
 
 #Broadcasts a message to all clients except the client that initiated the connection which is why we have the if statement.

@@ -62,7 +62,7 @@ while True:
 			except:
 				print('Disconnected from the server') # We take an exception handling in case the socket is closed on the other end (server) which means
 				# that it will return an empty byte object.
-				sys.exit() # We terminate the program when the socket closes and we return to the terminal.
+				sys.exit() # We terminate the program when the socket closes.
 
 		#	print(message.decode()) # When we receive the message via socks.recv(1024), the data is returned as a bytes object, because sockets transmits
 			# data in binary and so we need to convert it from the bytes format to String.
