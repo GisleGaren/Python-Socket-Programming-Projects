@@ -2,7 +2,7 @@ import sys
 from socket import *
 
 # Get command line arguments
-server_host = sys.argv[1]
+server_host = sys.argv[1] # sys.argv[1] is a list that contains arguments passed in the terminal. 
 server_port = int(sys.argv[2])
 filename = sys.argv[3]
 
