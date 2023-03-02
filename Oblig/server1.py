@@ -56,5 +56,7 @@ while True:
         #Write your code here
 		connectionSocket.close()
 		#End of your code
+	finally:
+		connectionSocket.close	
 serverSocket.close()
 sys.exit()#Terminate the program after sending the corresponding data
