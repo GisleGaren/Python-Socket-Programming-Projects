@@ -18,6 +18,7 @@ def now():
 	"""
 	return time.ctime(time.time())
 
+# The handleclient function handles client connections and receives the address with the ip and port number as parameter, as well as the connection socket object that is created when the client connects to the server.
 def handleClient(connection, addr):
 	"""
 	a client handler function 
@@ -25,46 +26,41 @@ def handleClient(connection, addr):
 	#this is where we broadcast everyone that a new client has joined
 	print(f"[NEW CONNECTION] {addr} connected")
 
-	# append function takes in the connection parameter
-	all_client_connections.append(connection)
-	# create a message to inform all other clients 
-	# that a new client has just joined.
-	broadcast(connection, f"Client {addr} joined.")
+	# append function takes in the connection object which is what the main function creates through the .accept function. It represents a socket object of that specific connection and we use this object to communicate from server to client.
+	all_client_connections.append(connection) # We add this new socket to the array.
+	# create a message to inform all other clients that a new client has just joined.
+	broadcast(connection, f"Client {addr} joined.") # We broadcast to the server and all the other clients except for the one that joined that a new client has joined the network.
 	welcomeMessage = "Welcome to the chat!"
-	connection.send(welcomeMessage.encode())
-
+	connection.send(welcomeMessage.encode()) # In order to send the message, we first need to convert the welcome message from String to bytes format because network protocols operates on bytes.
+	# The send() method operates on the specified connection socket created in main which sends the message to the same client that recently connected to the server.
 	try:
 		while True: # A loop that goes on and on...
-			message = connection.recv(2048).decode().strip() # When we receive the message via socks.recv(1024), the data is returned as a bytes object, 
-			#because sockets transmit data in binary and so we need to convert it from the bytes format to String.
-			print (now() + " " +  str(addr) + "#  ", message)
+			message = connection.recv(1024).decode().strip() # When we receive the message via connection.recv(1024), the data is returned as a bytes object, 
+			#because sockets transmit data in binary and so we need to convert it from the bytes format to String. The strip method at the end eliminates all spaces before and after the string.
+			print (now() + " " +  str(addr) + "#  ", message) # Prints the time and contents of the messages received from the client.
 			if message == "exit": # If we write exit in the terminal, then the client will close the connection it previously established.
-				broadcast(connection,f"{addr} has left the server".decode())
-				# connection.close()                        
-				# all_client_connections.remove(connection)
+				broadcast(connection,f"{addr} has left the server")
+				# connection.close()  Needed to remove these functions so that the terminal wouldn't crash                      
+				# all_client_connections.remove(connection) Same with this one, I believe it is due to the exception handling which handles faulty connections.
 				break # It will also break out of the loop if we simply press enter in the terminal without writing anything, so in other words an empty string.
-			### Write your code here ###
 			#broadcast this message to the others
 			else:
-				broadcast(connection, f"{addr}: {message}")
-			### Your code ends here ###
+				broadcast(connection, f"{addr}: {message}") # else we broadcast the message to everyone except for the client who sent the message with the address (ip, port) and the relevant message typed in the terminal.
 	except:
 		# connection.close()    This was causing an error where the terminal would keep getting refreshed and would spam line shifts.                    
-		all_client_connections.remove(connection)
+		all_client_connections.remove(connection) # If the connection doesn't receive anything or is lost, we remove the connection from the array.
 
 #Broadcasts a message to all clients except the client that initiated the connection which is why we have the if statement.
 def broadcast(connection, message): # The connection parameter is the the client that has initiated the connection which is in the all_client_connections array.
 	print ("Broadcasting") # It also takes in a message parameter which is the message to be broadcasted.
-	### Write your code here ###
 	for client in all_client_connections: # We go through each client that has connected to the server.
-		if (client != connection): # If the current connection is not equal to the specified client in the 
+		if (client != connection): # We want to go through all the client sockets in the array and check if the right one matches the connection made from the main method.
 			try:
-				client.send(message.encode()) # If this is successful, then we send the message to every other 
+				client.send(message.encode()) # If the client sockets in the array do not equal the one client socket that sent the message, we send the message to all the other clients.
 			except:
-				print("The client has been removed ")
+				print("The client has been removed ") # If we are unable to send the message to some of the clients in the array, we print that the client has been removed.
 				all_client_connections.remove(client) # Remove the client if the send does not occur because we assume the client has disconnected or is no longer able
 				# to receive any new messages. By removing the client we can avoid further errors if the same client wants to connect in the future.
-	### Your code ends here ###
 
 def main():
 	"""
@@ -87,7 +83,7 @@ def main():
 		print('Server connected by ', addr) # We print which address connected to server when the client connects.
 		print('at ', now()) # prints out what time the client connected.
 		thread.start_new_thread(handleClient, (connectionSocket,addr)) # We start a new thread that runs the handleClient() function where we pass connectionSocket and addr as arguments.
-	serverSocket.close()  # If 
+	serverSocket.close()  # This line will close the serverSocket object if we end up going out of the while loop.
 
 if __name__ == '__main__':
 	main()
