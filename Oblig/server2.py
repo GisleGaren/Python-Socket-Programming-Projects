@@ -1,5 +1,5 @@
 #import socket module
-# Write http://10.47.24.207:12000/Oblig/index.html depending on the ip address.
+# Write http://10.47.24.207:12000/Oblig/index.html in the webbrowser to test the client on the web NB! this depends on the ip address.
 from socket import *
 import socket # We imported socket so that we can get the socket.gethostbyname(socket.gethostname()) code so that we don't need to hardcode the private ip address
 import sys # In order to terminate the program
