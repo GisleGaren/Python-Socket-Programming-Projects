@@ -14,18 +14,19 @@ def handleClient(connection):
 	a client handler function 
 	"""
 	try:
-		message = connection.recv(4096).decode()
+		message = connection.recv(1024).decode()
 		print(message)
 		filename = message.split()[1]
 		f = open(filename[1:])
 		outputdata = f.read()
 		f.close() 
-		responseHTTP = "HTTP/1.1 200 OK \r\nContent-Type: text/html\r\nContent-Lenght: " +str(len(outputdata)) + "\r\n\r\n"
+		responseHTTP = "HTTP/1.1 200 OK \r\n\r\n"
 		connection.send(responseHTTP.encode()) 
+		#The for loop sends out every single character in the index.html file so in our case it first sends "<" and then "!" then "D" and so on to form "<!DOCTYPE html>" then the next tag, then the other content etc...
 		for i in range(0, len(outputdata)):
 			connection.send(outputdata[i].encode())
-			connection.send("\r\n\r\n".encode()) 
-			connection.close()
+		connection.send("\r\n\r\n".encode()) 
+		connection.close()
 	except IOError:
 		connection.send(b'HTTP/1.1 404 Not Found\r\n\r\n')
 		connection.send(b'<html><head></head><body><h1>404 Not Found</h1></body></html>\r\n')
@@ -48,22 +49,19 @@ def main():
 	while True:
 		try:
 			connectionSocket, addr = serverSocket.accept()
-			print("Server connected by " + addr)
+			print("Server connected by ", addr)
 			thread.start_new_thread(handleClient, (connectionSocket,))
 		except IOError:
 		#Send response message for file not found
 		#Write your code here
 			connectionSocket.send("HTTP/1.1 404 Not Found\r\n\r\n".encode())
 		#End of your code
-		
+			serverSocket.close()
 			connectionSocket.send("<html><head></head><body><h1>404 Not Found Test test</h1></body></html>\r\n".encode())
 		#Close client socket
-		
 		#Write your code here
-			connectionSocket.close()
 		#End of your code
 
 #End of your code
 if __name__ == '__main__':
 	main()
-serverSocket.close()

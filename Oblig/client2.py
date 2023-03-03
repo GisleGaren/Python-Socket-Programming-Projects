@@ -13,11 +13,12 @@ client_socket.connect((server_host, server_port)) # We will connect to a server 
 
 # Send GET request to server using the client socket. This will look something like: GET /Oblig/index.html HTTP/1.1  Host: 10.47.24.207
 request = f"GET /{filename} HTTP/1.1\r\nHost: {server_host}\r\n\r\n" 
+# The server side will extract the /Oblig/index.html part of the get request as the second (1st element) input and find the Oblig/index.html file in the local storage and subsequently send the contents of the index.html file to the client side.
 print(request)
 try:
-    client_socket.send(request.encode())
+    client_socket.send(request.encode()) # Send the get request to the server side.
 except:
-    print("Error sending GET Request to the server. Please try again later...")
+    print("Error sending GET Request to the server. Please try again later...") # Print error if the sending doesn't work.
 try:
     # Without dicing up the bytes, I get an error in the terminal.
     # The following code receives a response from the server in the form of bytes and appends them to the response byte string.
@@ -29,10 +30,10 @@ try:
         response += data
     
     # Print server response
-    print(response.decode()) 
+    print(response.decode()) # We print out the contents of the file at the end to the terminal.
 except:
-    print("Error receiving response from the server. Socket closed")
-    sys.exit()
+    print("Error receiving response from the server. Socket closed") # If this doesn't work, we are not properly receiving bytes from the server side.
+    sys.exit() # Exit and then close out of the system.
 
 # Close socket
 client_socket.close()
