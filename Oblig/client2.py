@@ -37,4 +37,3 @@ except:
 
 # Close socket
 client_socket.close()
-
