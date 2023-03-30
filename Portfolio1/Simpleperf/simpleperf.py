@@ -7,13 +7,15 @@ import argparse
 # Go through the code line for line and learn what it does.
 
 def print_interval_stats(client_socket, server_ip, port, start_time, duration, interval, unit):
-	total_data_sent = 0   
+	total_data_sent = 0
+	interval_data_sent = 0  # New variable to store data sent during the current interval   
 	interval_start_time = start_time  # Start time of the interval = start_time parameter which is the timer from when the connection is established
 	data_chunk = b'\0' * 1000
 
 	while time.time() - start_time < duration: # The difference between the start_time and the time elapsed cannot be more than the duration
 		sent = client_socket.send(data_chunk)
 		total_data_sent += sent
+		interval_data_sent += sent  # Update the interval data sent
 
 		current_time = time.time() # Time at that very second
 		elapsed_interval_time = current_time - interval_start_time  # we need this to check that the time elapsed has not gone more than the
@@ -23,12 +25,14 @@ def print_interval_stats(client_socket, server_ip, port, start_time, duration, i
 		# In the case of "python3 simpleperf.py -c -t 10 -i 2" the reason the last interval wasn't printed out is that 
 		if elapsed_interval_time >= interval or time.time() - start_time >= duration: # If the interval time is greater than or equal to the interval, then we print
 			interval_end_time = current_time # Replace the current_time with the end time
-			sent_data = (total_data_sent / format_to_bytes(1, unit)) # Convert the sent_data to its respective unit of measurement
-			interval_bandwidth = sent_data / elapsed_interval_time # How much data was sent in that interval?
-
+			sent_data = (interval_data_sent / format_to_bytes(1, unit)) # Convert the sent_data to its respective unit of measurement
+			bandWidth_MB = (interval_data_sent / format_to_bytes(1,"MB") * 8)
+			interval_bandwidth = bandWidth_MB / elapsed_interval_time # How much data was sent in that interval?
+			
 			print("{:<20}{:<20}{:<20}{:<20}".format(f"{server_ip}:{port}", f"{interval_start_time - start_time:.1f} - {interval_end_time - start_time:.1f}", f"{int(sent_data)} {unit}", f"{interval_bandwidth:.2f} Mbps"))
 			# the print function above prints as the second column, the 
 			interval_start_time = interval_end_time
+			interval_data_sent = 0  # Reset the interval data sent
 
 	return total_data_sent
 
@@ -64,7 +68,8 @@ def run_server(ip, port, unit):
 
 		elapsed_time = time.time() - start_time
 		received_data = total_data_received / format_to_bytes(1, unit)  # If for example we have KB, then we need to divide total_data_received by what format_to_bytes(1, "KB") returns which would be 1000.
-		bandwidth = received_data / elapsed_time
+		bandWidth_MB = (total_data_received / format_to_bytes(1,"MB") * 8) # We need this because the portfolio asks for us to always get the bandwidth in Mbps
+		bandwidth = bandWidth_MB / elapsed_time 
 
 		print("{:<20}{:<20}{:<20}{:<20}".format("ID", "Interval", "Received", "Rate"))
 		print("{:<20}{:<20}{:<20}{:<20}".format(f"{address[0]}:{address[1]}", f"0.0 - {elapsed_time:.2f}", f"{int(received_data)} {unit}", f"{bandwidth:.2f} Mbps"))
@@ -103,9 +108,10 @@ def run_client(server_ip, port, duration, unit, interval, parallel, numbytes):
 	if ack == b'ACK':
 		elapsed_time = time.time() - start_time
 		sent_data = total_data_sent / format_to_bytes(1, unit)  # If for example we have KB, then we need to divide total_data_received by what format_to_bytes(1, "KB") returns which would be 1000.
-		bandwidth = sent_data / elapsed_time
+		bandwidth_MB = (total_data_sent / format_to_bytes(1,"MB") * 8) # We need this because the portfolio asks for us to always get the bandwidth in Mbps
+		bandwidth = bandwidth_MB / elapsed_time
 
-		print("\n------------------------------------------------------------ \n")
+		print("\n----------------------------------------------------------------------------------- \n")
 		print("{:<20}{:<20}{:<20}{:<20}".format(f"{server_ip}:{port}", f"0.0 - {elapsed_time:.2f}", f"{int(sent_data)} {unit}", f"{bandwidth:.2f} Mbps"))
 
 	client_socket.close()
