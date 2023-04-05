@@ -2,6 +2,8 @@ import socket
 import sys
 import time
 import argparse
+import threading
+import multiprocessing  # Import multiprocessing
 
 # To do list from 24.03.23. Check the bandwidth, is the information we are getting and sending back and forth of the right format? B, KB or MB?
 # Go through the code line for line and learn what it does.
@@ -33,96 +35,125 @@ def print_interval_stats(client_socket, server_ip, port, start_time, duration, i
 			# the print function above prints as the second column, the 
 			interval_start_time = interval_end_time
 			interval_data_sent = 0  # Reset the interval data sent
+	print("\n----------------------------------------------------------------------------------- \n")
+	return total_data_sent
+
+def send_data_with_numbytes(client_socket, numbytes):
+	total_data_sent = 0
+	data_chunk = b'\0' * 1000
+
+	while total_data_sent < numbytes:
+		sent = client_socket.send(data_chunk)
+		total_data_sent += sent
 
 	return total_data_sent
 
+# Add this new function to handle individual client connections
+def handle_connection(connection, address, unit):
+    start_time = time.time()
+    total_data_received = 0
+
+    try:
+        while True:
+            data = connection.recv(1000)
+            total_data_received += len(data)
+
+            if data == b'FINISH':
+                connection.send(b'ACK')
+                break
+
+            if not data:
+                break
+    finally:
+        connection.close()
+
+    elapsed_time = time.time() - start_time
+    received_data = total_data_received / format_to_bytes(1, unit)
+    bandWidth_MB = (total_data_received / format_to_bytes(1, "MB") * 8)
+    bandwidth = bandWidth_MB / elapsed_time
+
+    print("{:<20}{:<20}{:<20}{:<20}".format("ID", "Interval", "Received", "Rate"))
+    print("{:<20}{:<20}{:<20}{:<20}".format(f"{address[0]}:{address[1]}", f"0.0 - {elapsed_time:.2f}", f"{int(received_data)} {unit}", f"{bandwidth:.2f} Mbps"))
+
 def run_server(ip, port, unit):
-	server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	server_socket.bind((ip, port))
-	server_socket.listen(1)
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind((ip, port))
+    server_socket.listen(5)
 
-	print("---------------------------------------------")
-	print(f"A simpleperf server is listening on {ip}:{port}")
-	print("---------------------------------------------")
+    print("---------------------------------------------")
+    print(f"A simpleperf server is listening on {ip}:{port}")
+    print("---------------------------------------------")
 
-	while True:
-		connection, address = server_socket.accept()
-		print(f"A simpleperf client with {address} is connected with server ('{ip}', {port}) \n")
+    while True:
+        connection, address = server_socket.accept()
+        print(f"A simpleperf client with {address} is connected with server ('{ip}', {port}) \n")
 
-		start_time = time.time() # Marks the starting point of the timer which is when we have established the connection
-		total_data_received = 0 # initilializa the total data received variable
+        # Create a new thread to handle this connection
+        connection_thread = threading.Thread(target=handle_connection, args=(connection, address, unit))
+        connection_thread.start()
 
-		try:
-			while True:
-				data = connection.recv(1000) # The connection keeps receiving chunks of data in 1000 bytes
-				total_data_received += len(data) # Adds the chunks of data and appends it 
-
-				if data == b'FINISH': # The server keeps receiving data in 1000 byte chunks until the client sends a string "FINISH" to the server
-					connection.send(b'ACK') # The server then sends an acknowledgement back to the client and breaks out of the while loop.
-					break
-
-				if not data:
-					break
-		finally: # Finally is thrown in whether an exception is raised or not, so that the connection closes even if an error occurs.
-			connection.close()
-
-		elapsed_time = time.time() - start_time
-		received_data = total_data_received / format_to_bytes(1, unit)  # If for example we have KB, then we need to divide total_data_received by what format_to_bytes(1, "KB") returns which would be 1000.
-		bandWidth_MB = (total_data_received / format_to_bytes(1,"MB") * 8) # We need this because the portfolio asks for us to always get the bandwidth in Mbps
-		bandwidth = bandWidth_MB / elapsed_time 
-
-		print("{:<20}{:<20}{:<20}{:<20}".format("ID", "Interval", "Received", "Rate"))
-		print("{:<20}{:<20}{:<20}{:<20}".format(f"{address[0]}:{address[1]}", f"0.0 - {elapsed_time:.2f}", f"{int(received_data)} {unit}", f"{bandwidth:.2f} Mbps"))
-
-	#	I believe I need to add connection.close() here as the task says that the server gracefully closes the connection when the above is printed.
-
-def run_client(server_ip, port, duration, unit, interval, parallel, numbytes):
-	# Create a TCP socket
+def parallel_send_data(server_ip, port, duration, unit, interval, numbytes, connection):
 	client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-	# Connect to the server
 	client_socket.connect((server_ip, port))
+
+	print(connection)
+	if numbytes:
+		total_data_sent = send_data_with_numbytes(client_socket, numbytes)
+	elif interval:
+		total_data_sent = print_interval_stats(client_socket, server_ip, port, time.time(), duration, interval, unit)
+	else:
+		total_data_sent = 0
+		data_chunk = b'\0' * 1000
+
+		start_time = time.time()
+		while time.time() - start_time < duration:
+			sent = client_socket.send(data_chunk)
+			total_data_sent += sent
+
+	print(f"{connection} has transferred {total_data_sent} bytes") # For å sjekke hvor mange bytes hver connection sender
+	client_socket.send(b'FINISH')
+	ack = client_socket.recv(1024)
+
+	if ack == b'ACK':
+		elapsed_time = time.time() - start_time
+		if elapsed_time < 1:
+			elapsed_time = 1
+		sent_data = total_data_sent / format_to_bytes(1, unit)
+		bandwidth_MB = (total_data_sent / format_to_bytes(1, "MB") * 8)
+		bandwidth = bandwidth_MB / elapsed_time
+
+		print("{:<20}{:<20}{:<20}{:<20}".format(f"{server_ip}:{port}", f"0.0 - {elapsed_time:.2f}", f"{int(sent_data)} {unit}", f"{bandwidth:.2f} Mbps"))
+
+	client_socket.close()
+
+def run_client(server_ip, port, duration, unit, interval, parallel, numbytes):
 	print("---------------------------------------------")
 	print(f"A simpleperf client connecting to server {server_ip}, port {port}")
 	print("---------------------------------------------")
 
 	print("{:<20}{:<20}{:<20}{:<20}".format("ID", "Interval", "Transfer", "Bandwidth"))
-	start_time = time.time() # Start the timer as soon as the connection has started
 
-	if interval:
-		total_data_sent = print_interval_stats(client_socket, server_ip, port, start_time, duration, interval, unit)
-	else:
-		total_data_sent = 0
-		data_chunk = b'\0' * 1000
+	processes = []
+	
+	# Create a thread object using the Thread() constructor from the "threading" module 
+	for i in range(parallel): # target parameter states which function should be called when thread starts running
+		p = multiprocessing.Process(target=parallel_send_data, args=(server_ip, port, duration, unit, interval, numbytes, i + 1))
+		p.start() # Start the thread after defining it
+		processes.append(p) # Add it to the array list
 
-		while time.time() - start_time < duration:
-			sent = client_socket.send(data_chunk)
-			total_data_sent += sent
+	for p in processes: # WAit for all the threads to finish executing before proceeding with the rest of the program
+		p.join() # the join() method ensures that all the threads have been executed before we move onto the next line of the run_client() code.
+		# In this case it is nothing, because there is no more code in the run_client() method after line 141.
 
-	# Send the finish/bye message
-	client_socket.send(b'FINISH') # Once the duration time has elapsed, send the "FINISH" string to the server
-
-	# Wait for the acknowledgement
-	ack = client_socket.recv(1024) # The server should then send a String "ACK" to the client
-
-	if ack == b'ACK':
-		elapsed_time = time.time() - start_time
-		sent_data = total_data_sent / format_to_bytes(1, unit)  # If for example we have KB, then we need to divide total_data_received by what format_to_bytes(1, "KB") returns which would be 1000.
-		bandwidth_MB = (total_data_sent / format_to_bytes(1,"MB") * 8) # We need this because the portfolio asks for us to always get the bandwidth in Mbps
-		bandwidth = bandwidth_MB / elapsed_time
-
-		print("\n----------------------------------------------------------------------------------- \n")
-		print("{:<20}{:<20}{:<20}{:<20}".format(f"{server_ip}:{port}", f"0.0 - {elapsed_time:.2f}", f"{int(sent_data)} {unit}", f"{bandwidth:.2f} Mbps"))
-
-	client_socket.close()
 
 # Function to parse command line arguments
 def parse_arguments():
 	parser = argparse.ArgumentParser(description="A simple network throughput measurement tool")
 	parser.add_argument("-s", "--server", action="store_true", help="Run in server mode")
 	parser.add_argument("-c", "--client", action="store_true", help="Run in client mode")
-	parser.add_argument("-b", "--bind", type=str, default="0.0.0.0", help="Server IP address (default: 0.0.0.0)")
-	parser.add_argument("-I", "--ip", type=str, default="127.0.0.1", help="Client IP address (default: 127.0.0.1)")
+	parser.add_argument("-b", "--bind", type=str, default="127.0.0.1", help="Select the ip address of the server's interface (default: 127.0.0.1)")
+	parser.add_argument("-I", "--ip", type=str, default="127.0.0.1", help="Server IP address (default: 127.0.0.1)")
 	parser.add_argument("-p", "--port", type=int, default=8088, choices=range(1024, 65536), help="Port number (default: 8088)")
 	parser.add_argument("-t", "--time", type=int, default=25, help="Duration in seconds (default: 25)")
 	parser.add_argument("-f", "--format", type=str, choices=["B", "KB", "MB"], default="MB", help="Summary format (default: MB)")
@@ -132,9 +163,17 @@ def parse_arguments():
 
 	args = parser.parse_args()
 
+	if args.port not in range(1024, 65536):
+		print("Error: port number must be in the range between 1024 and 65536")
+		sys.exit(1)
+
+	if args.time <= 0:
+		print("Error: -t flag must be greater than 0")
+		sys.exit(1)
+
 	if args.numbytes: # If we provide the "-n" command in the terminal, then we go into the if statement. For example "-n 10MB"
 		num_bytes_value = int(args.numbytes[:-2]) # This converts the number values of the numbytes command string into an int. The [:-2] slices the string to remove the last two letters in this case "MB" so that "10" is converted to an int.
-		if args.numbytes[-2:] != "MB" or args.numbytes[-2:] != "KB": # Incase we type "15B" then "args.numbytes[-2:]" would return "5B" which will return an error in the "format_to_bytes" function
+		if args.numbytes[-2:] != "MB" and args.numbytes[-2:] != "KB": # Incase we type "15B" then "args.numbytes[-2:]" would return "5B" which will return an error in the "format_to_bytes" function
 			num_bytes_unit = args.numbytes[-1:] # If for example we type "15B" in the terminal, we would only take in the last letter "B" and pass it as an arguemtn into format_to_bytes
 		else:
 			num_bytes_unit = args.numbytes[-2:] # This returns the last two letters of a String so "10MB" turns into "MB"
@@ -160,5 +199,8 @@ if __name__ == "__main__":
 		sys.exit(1)
 	elif args.client:
 		run_client(args.ip, args.port, args.time, args.format, args.interval, args.parallel, args.numbytes)
+	elif args.server:
+		run_server(args.bind,args.port,args.format) # Default server settings would be data transfer in MegaBytes and port number 8088.
 	else:
-		run_server(args.bind,args.port, args.format) # Default server settings would be data transfer in MegaBytes and port number 8088.
+		print("Error, you must select server or client mode")
+		sys.exit(1)
