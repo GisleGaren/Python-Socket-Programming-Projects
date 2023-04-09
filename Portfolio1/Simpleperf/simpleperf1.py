@@ -3,6 +3,7 @@ import sys
 import time
 import argparse
 import threading
+import re
 
 # Description:
 # This function is responsible for slicing up the total interval time defined by -t into -i time chunks and will print out each the data transfers one
@@ -202,8 +203,8 @@ def parallel_send_data(server_ip, port, duration, unit, interval, numbytes, conn
 		if elapsed_time < 1:																# If the elapsed time is less than 1, give elapsed_time value 1
 			elapsed_time = 1																
 		sent_data = total_data_sent / format_to_bytes(1, unit)								# Convert the received data into the specified format
-		bandwidth_MB = (total_data_sent / format_to_bytes(1, "MB") * 8)						# Convert bandwidth from megabytes to megabits
-		bandwidth = bandwidth_MB / elapsed_time												# Get the average bandwidth
+		bandwidth_Mbps = (total_data_sent / format_to_bytes(1, "MB") * 8)						# Convert bandwidth from megabytes to megabits
+		bandwidth = bandwidth_Mbps / elapsed_time												# Get the average bandwidth
 		
 		# Print the summary statistic for each connection
 		print("{:<20}{:<20}{:<20}{:<20}".format(f"{server_ip}:{port}", f"0.0 - {elapsed_time:.2f}", f"{int(sent_data)} {unit}", f"{bandwidth:.2f} Mbps"))
@@ -228,7 +229,7 @@ def parallel_send_data(server_ip, port, duration, unit, interval, numbytes, conn
 # Void. The function doesn't return anything.
 
 def run_client(server_ip, port, duration, unit, interval, parallel, numbytes):
-    # Print out info about the client connection to the server
+	# Print out info about the client connection to the server
 	print("---------------------------------------------")
 	print(f"Simpleperf client connecting to server {server_ip}, port {port}")
 	print("---------------------------------------------")
@@ -252,8 +253,13 @@ def run_client(server_ip, port, duration, unit, interval, parallel, numbytes):
 # and when the parser encounters this, it stores a boolean "True" when it is encountered. Other options could be type = "str" indicating a string to be expected. It could also contain "default"
 # which is the value the program will default to the specified argument if none is provided in the terminal. Finally, by running -h, the terminal will return simple documentation about 
 # the script and what the arguments can be. Below are if statements that handles exceptions for illegal arguments in the terminal and exits the program with status code 1, which implies
-# an error. The last if statement is there to slice and dice the numbytes argument so that it is separated into the numbytes value and the unit, so that we can run conversions. After that,
-# the function returns an args object.
+# an error. Finally we have input validation for the numbytes argument, which is handled by regular expression. Here we have to import the re module which includes the .match() method
+# which takes in a String as the first argument which is a pattern which is what the args.numbytes String will match itself with. The first part of the String "r"(\d+)([a-zA-Z]+)"" is 
+# (\d+) which means that the first part of the string can be one or more digits (0-9) and this will be returned as a separate object. The second part is ([a-zA-Z]+) which will also return
+# a second object which means that the second part of the String in args.numbytes will consist of a variety of letters both big and small in the alphabet a-zA-Z. The second argument is
+# the String, in this case "args.numbytes" that we want to match and the third argument "re.I" means ignore case and that we should treat uppercase and lowercase letters as equivalent.
+# If the input matches the regex, we unpack the match.groups() tuple into two variables first one being "number value" and the second variable being "unit". We then test the unit to check
+# if the unit is either B, KB or MB and if not, raise an error. If the whole input in the command line doesn't match regex, raise exception. Finally return the complete args object.
 # Arguments:
 # None
 # Returns:
@@ -302,36 +308,55 @@ def parse_arguments():
 		print("Error: the number of parallel connections can only be between 1 to 5")
 		sys.exit(1)
 
-	if args.numbytes: 																# If -n is defined
-		num_bytes_value = int(args.numbytes[:-2]) 									# [:-2] removes the last two letters in the String so that "10MB" becomes "10" then we parse "10" to int 10
-		if args.numbytes[-2:] != "MB" and args.numbytes[-2:] != "KB": 				# If we get "15B", "args.numbytes[-2:]" returns "5B" which will return an error in the "format_to_bytes" function
-			num_bytes_unit = args.numbytes[-1:] # If for example we type "15B" in the terminal, we would only take in the last letter "B" and pass it as an arguemtn into format_to_bytes
+	if args.numbytes:
+		# 
+		match = re.match(r"(\d+)([a-zA-Z]+)", args.numbytes, re.I)					# Match the input of -n to the regular expression
+
+		if match:
+			num_bytes_value, num_bytes_unit = match.groups()						# If there is a match, unpack the tuple from .groups() into two variables, the first number value and the second one, unit
+
+			num_bytes_value = int(num_bytes_value)									# Convert the matched number to an int
+
+			if num_bytes_unit.upper() not in ["B", "KB", "MB"]:						# Check if the unit is valid (B, KB, or MB)
+				raise ValueError("Invalid unit. Please use B, KB, or MB.")			# Raise exception if the unit variable isn't B, KB or MB
+
+			args.numbytes = format_to_bytes(num_bytes_value, num_bytes_unit)		# Convert the number value to bytes
+
 		else:
-			num_bytes_unit = args.numbytes[-2:] # This returns the last two letters of a String so "10MB" turns into "MB"
-		args.numbytes = format_to_bytes(num_bytes_value, num_bytes_unit) # After we have split the "10MB" into 10 and "MB" respectively, we add those as arguments into the format_to_bytes function.
+			# If the input doesn't match the expected pattern, raise an error
+			raise ValueError("Invalid format. Please provide the input in the format: <number><unit>, e.g., 10MB.")
+	return args 																	# We return the final args object
 
-	return args # We return an "args" object with a list of values ("client" = True, "server" = False, "ip" = 192.168.1.0, etc...)
+# Description:
+# This function takes in a value and a unit as arguments and returns the value in bytes. It is used to convert values of different sizes (e.g. KB, MB) into bytes, which is the unit used in the
+# program to measure the amount of data transferred. A ValueError is raised if an invalid unit is provided and 
+# Arguments:
+# value: an integer representing the value to be converted
+# unit: a string representing the unit of the value (e.g. "B", "KB", "MB")
+# Returns:
+# An integer representing the converted value in bytes.
 
-def format_to_bytes(value, unit): # This function converts the units to their rightful value. For MB we have to divide by 1000000 to go from B to MB
-	if unit == "B":
+def format_to_bytes(value, unit):
+	if unit == "B":												# If the unit is "B" then we are already at bytes
 		return value
-	elif unit == "KB":
+	elif unit == "KB":											# If unit is "KB" then we need to multiply by 1000 to convert to bytes
 		return value * 1000
 	elif unit == "MB":
-		return value * 1000 * 1000
+		return value * 1000 * 1000								# If unit is "BB" then we need to multiply by 1000000 to convert to bytes
 	else:
-		raise ValueError(f"Invalid unit: {unit}")
+		raise ValueError(f"Invalid unit: {unit}")				# Raise error if unit is invalid
 
 if __name__ == "__main__":
-	args = parse_arguments() # Example of what the args object could have is: args = { "client": True, "server": False, "ip": "192.168.1.100", "port": 8888, "time": 30, "format": "MB", "interval": 5, "parallel": 2, "numbytes": 10000000 } 
+	args = parse_arguments()									# Code starts at main and we start off by defining the args object 
 
-	if args.server and args.client:
+	# If both -c and -s have been implemented in the terminal, handle error
+	if args.server and args.client:							
 		print("Error: you must run either in server or client mode, not both")
 		sys.exit(1)
-	elif args.client:
+	elif args.client:											# If we only have -c then we invoke the client
 		run_client(args.ip, args.port, args.time, args.format, args.interval, args.parallel, args.numbytes)
-	elif args.server:
-		run_server(args.bind,args.port,args.format) # Default server settings would be data transfer in MegaBytes and port number 8088.
+	elif args.server:											# If we only have -s then we invoke the server
+		run_server(args.bind,args.port,args.format)
 	else:
-		print("Error, you must select server or client mode")
+		print("Error, you must select server or client mode")	# If neither of those things, handle error
 		sys.exit(1)
