@@ -3,11 +3,19 @@ import sys
 import time
 import argparse
 import threading
-import multiprocessing  # Import multiprocessing
 
-# To do list from 24.03.23. Check the bandwidth, is the information we are getting and sending back and forth of the right format? B, KB or MB?
-# Go through the code line for line and learn what it does.
-
+# Description:
+# This function is responsible for slicing up the total interval time defined by -t into -i time chunks and will print out each the data transfers one
+# by one with each row being defined by the -i interval flag. At the end of the total time interval given by -t, it will also display the total transfer
+# and the total time elapsed.
+# Arguments:
+# client_socket: this is the client socket object that is created from the parallel_send_data function which defines a specific connection to the server.
+# server_ip: this holds the ip address of the server using the IPv4 address family.
+# port: port number of the server between 1024 and 65535.
+# start_time: is time.time() which shows time elapsed after January 1, 1970, 00:00:00, in this case we start the timer from when the function is called.
+# duration: is the amount of time in seconds defined by the -t flag which defines how long we want the connection to send information in bytes.
+# interval: defines how long each interval being printed should last given a duration -t in seconds.
+# unit: Is the format 
 def print_interval_stats(client_socket, server_ip, port, start_time, duration, interval, unit):
 	total_data_sent = 0
 	interval_data_sent = 0  # New variable to store data sent during the current interval   
@@ -50,54 +58,62 @@ def send_data_with_numbytes(client_socket, numbytes):
 
 # Add this new function to handle individual client connections
 def handle_connection(connection, address, unit):
-    start_time = time.time()
-    total_data_received = 0
+	start_time = time.time()
+	total_data_received = 0
 
-    try:
-        while True:
-            data = connection.recv(1000)
-            total_data_received += len(data)
+	try:
+		while True:
+			data = connection.recv(1000)
+			total_data_received += len(data)
 
-            if data == b'FINISH':
-                connection.send(b'ACK')
-                break
+			if data == b'BYE':
+				connection.send(b'ACK')
+				break
 
-            if not data:
-                break
-    finally:
-        connection.close()
+			if not data:
+				break
+	finally:
+		connection.close()
 
-    elapsed_time = time.time() - start_time
-    received_data = total_data_received / format_to_bytes(1, unit)
-    bandWidth_MB = (total_data_received / format_to_bytes(1, "MB") * 8)
-    bandwidth = bandWidth_MB / elapsed_time
+	elapsed_time = time.time() - start_time
+	received_data = total_data_received / format_to_bytes(1, unit)
+	bandWidth_MB = (total_data_received / format_to_bytes(1, "MB") * 8)
+	bandwidth = bandWidth_MB / elapsed_time
 
-    print("{:<20}{:<20}{:<20}{:<20}".format("ID", "Interval", "Received", "Rate"))
-    print("{:<20}{:<20}{:<20}{:<20}".format(f"{address[0]}:{address[1]}", f"0.0 - {elapsed_time:.2f}", f"{int(received_data)} {unit}", f"{bandwidth:.2f} Mbps"))
+	print("{:<20}{:<20}{:<20}{:<20}".format(f"{address[0]}:{address[1]}", f"0.0 - {elapsed_time:.2f}", f"{int(received_data)} {unit}", f"{bandwidth:.2f} Mbps"))
 
+# Improve exception handling
 def run_server(ip, port, unit):
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind((ip, port))
-    server_socket.listen(5)
+	server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	server_socket.bind((ip, port))
+	server_socket.listen(5)
 
-    print("---------------------------------------------")
-    print(f"A simpleperf server is listening on {ip}:{port}")
-    print("---------------------------------------------")
+	print("----------------------------------------------------")
+	print(f"A simpleperf server is listening on {ip}:{port}")
+	print("----------------------------------------------------")
+	
+	while True:
+		connection, address = server_socket.accept()
+		print(f"A simpleperf client with {address} is connected with server ('{ip}', {port}) \n")
 
-    while True:
-        connection, address = server_socket.accept()
-        print(f"A simpleperf client with {address} is connected with server ('{ip}', {port}) \n")
-
-        # Create a new thread to handle this connection
-        connection_thread = threading.Thread(target=handle_connection, args=(connection, address, unit))
-        connection_thread.start()
+		# Create a new thread to handle this connection
+		connection_thread = threading.Thread(target=handle_connection, args=(connection, address, unit))
+		connection_thread.start()
 
 def parallel_send_data(server_ip, port, duration, unit, interval, numbytes, connection):
 	client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 	client_socket.connect((server_ip, port))
+	client_ip = client_socket.getsockname()[0]
+	client_port = client_socket.getsockname()[1]
+	print(f"Client {client_ip}:{client_port} connected with server {server_ip} {port}")
 
-	print(connection)
+	time.sleep(0.01) # Need this to make sure that all the parallel connections get the time to print the message above before the header
+	if connection == 1:
+		print() # Space between the last connection printed and the transfer headers
+		print("{:<20}{:<20}{:<20}{:<20}".format("ID", "Interval", "Transfer", "Bandwidth"))
+	
+	start_time = time.time()	
 	if numbytes:
 		total_data_sent = send_data_with_numbytes(client_socket, numbytes)
 	elif interval:
@@ -106,23 +122,23 @@ def parallel_send_data(server_ip, port, duration, unit, interval, numbytes, conn
 		total_data_sent = 0
 		data_chunk = b'\0' * 1000
 
-		start_time = time.time()
 		while time.time() - start_time < duration:
 			sent = client_socket.send(data_chunk)
 			total_data_sent += sent
 
-	print(f"{connection} has transferred {total_data_sent} bytes") # For å sjekke hvor mange bytes hver connection sender
-	client_socket.send(b'FINISH')
+	#print(f"{connection} has transferred {total_data_sent} bytes") # For å sjekke hvor mange bytes hver connection sender
+	client_socket.send(b'BYE')
 	ack = client_socket.recv(1024)
 
 	if ack == b'ACK':
+		# print("Vi fikk tilbake en ACK")
 		elapsed_time = time.time() - start_time
 		if elapsed_time < 1:
 			elapsed_time = 1
 		sent_data = total_data_sent / format_to_bytes(1, unit)
 		bandwidth_MB = (total_data_sent / format_to_bytes(1, "MB") * 8)
 		bandwidth = bandwidth_MB / elapsed_time
-
+		
 		print("{:<20}{:<20}{:<20}{:<20}".format(f"{server_ip}:{port}", f"0.0 - {elapsed_time:.2f}", f"{int(sent_data)} {unit}", f"{bandwidth:.2f} Mbps"))
 
 	client_socket.close()
@@ -131,21 +147,19 @@ def run_client(server_ip, port, duration, unit, interval, parallel, numbytes):
 	print("---------------------------------------------")
 	print(f"A simpleperf client connecting to server {server_ip}, port {port}")
 	print("---------------------------------------------")
+	print()
 
-	print("{:<20}{:<20}{:<20}{:<20}".format("ID", "Interval", "Transfer", "Bandwidth"))
+	threads = []
 
-	processes = []
-	
 	# Create a thread object using the Thread() constructor from the "threading" module 
 	for i in range(parallel): # target parameter states which function should be called when thread starts running
-		p = multiprocessing.Process(target=parallel_send_data, args=(server_ip, port, duration, unit, interval, numbytes, i + 1))
-		p.start() # Start the thread after defining it
-		processes.append(p) # Add it to the array list
+		t = threading.Thread(target=parallel_send_data, args=(server_ip, port, duration, unit, interval, numbytes, i + 1))
+		t.start() # Start the thread after defining it
+		threads.append(t) # Add it to the array list
 
-	for p in processes: # WAit for all the threads to finish executing before proceeding with the rest of the program
-		p.join() # the join() method ensures that all the threads have been executed before we move onto the next line of the run_client() code.
+	for t in threads: # WAit for all the threads to finish executing before proceeding with the rest of the program
+		t.join() # the join() method ensures that all the threads have been executed before we move onto the next line of the run_client() code. Exception handling t.join(interval +2)
 		# In this case it is nothing, because there is no more code in the run_client() method after line 141.
-
 
 # Function to parse command line arguments
 def parse_arguments():
@@ -154,22 +168,25 @@ def parse_arguments():
 	parser.add_argument("-c", "--client", action="store_true", help="Run in client mode")
 	parser.add_argument("-b", "--bind", type=str, default="127.0.0.1", help="Select the ip address of the server's interface (default: 127.0.0.1)")
 	parser.add_argument("-I", "--ip", type=str, default="127.0.0.1", help="Server IP address (default: 127.0.0.1)")
-	parser.add_argument("-p", "--port", type=int, default=8088, choices=range(1024, 65536), help="Port number (default: 8088)")
+	parser.add_argument("-p", "--port", type=int, default=8088, help="Port number (default: 8088)")
 	parser.add_argument("-t", "--time", type=int, default=25, help="Duration in seconds (default: 25)")
 	parser.add_argument("-f", "--format", type=str, choices=["B", "KB", "MB"], default="MB", help="Summary format (default: MB)")
 	parser.add_argument("-i", "--interval", type=int, help="Print statistics per interval seconds")
-	parser.add_argument("-P", "--parallel", type=int, default=1, choices=range(1, 6), help="Number of parallel connections (default: 1)")
+	parser.add_argument("-P", "--parallel", type=int, default=1, help="Number of parallel connections (default: 1)")
 	parser.add_argument("-n", "--numbytes", type=str, help="Number of bytes to transfer (e.g., 100B, 1KB, 10MB)")
 
 	args = parser.parse_args()
 
 	if args.port not in range(1024, 65536):
-		print("Error: port number must be in the range between 1024 and 65536")
+		print("Error: port number must be in the range between 1024 and 65535")
 		sys.exit(1)
 
 	if args.time <= 0:
 		print("Error: -t flag must be greater than 0")
 		sys.exit(1)
+
+	if args.parallel not in range(1,6):
+		print("Error: the number of parallel connections can only be between 1 to 5")
 
 	if args.numbytes: # If we provide the "-n" command in the terminal, then we go into the if statement. For example "-n 10MB"
 		num_bytes_value = int(args.numbytes[:-2]) # This converts the number values of the numbytes command string into an int. The [:-2] slices the string to remove the last two letters in this case "MB" so that "10" is converted to an int.
